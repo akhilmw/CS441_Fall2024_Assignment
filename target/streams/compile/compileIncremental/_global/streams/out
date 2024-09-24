@@ -1,6 +1,6 @@
 [0m[[0m[0mdebug[0m] [0m[0m[zinc] IncrementalCompile -----------[0m
 [0m[[0m[0mdebug[0m] [0m[0mIncrementalCompile.incrementalCompile[0m
-[0m[[0m[0mdebug[0m] [0m[0mprevious = Stamps for: 4 products, 2 sources, 4 libraries[0m
-[0m[[0m[0mdebug[0m] [0m[0mcurrent source = Set(${BASE}/src/main/scala/TensorFlowTest.scala, ${BASE}/src/main/scala/Main.scala)[0m
+[0m[[0m[0mdebug[0m] [0m[0mprevious = Stamps for: 24 products, 9 sources, 7 libraries[0m
+[0m[[0m[0mdebug[0m] [0m[0mcurrent source = Set(${BASE}/src/main/scala/mapperReducer/WordCountBPEJob.scala, ${BASE}/src/main/scala/test/LocalWordCountBPEJob.scala, ${BASE}/src/main/scala/test/LocalSemanticRepresentationJob.scala, ${BASE}/src/main/scala/utils/BytePairUtils.scala, ${BASE}/src/main/scala/Main.scala, ${BASE}/src/main/scala/mapperReducer/SemanticRepresentation.scala, ${BASE}/src/main/scala/utils/EmbeddingGenerator.scala, ${BASE}/src/main/scala/utils/CustomReshapePreprocessor.scala, ${BASE}/src/main/scala/utils/SimilarityUtil.scala)[0m
 [0m[[0m[0mdebug[0m] [0m[0m> initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(), unmodified = ...),Set(),Set(),API Changes: Set())[0m
 [0m[[0m[0mdebug[0m] [0m[0mNo changes[0m

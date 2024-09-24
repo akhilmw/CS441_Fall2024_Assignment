@@ -1,1 +1,1 @@
-["Main","TensorFlowTest"]
+["Main","mapperReducer.SemanticRepresentation","mapperReducer.WordCountBPEJob","test.LocalSemanticRepresentationJob","test.LocalWordCountBPEJob"]

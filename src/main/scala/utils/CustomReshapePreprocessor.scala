@@ -1,3 +1,5 @@
+package utils
+
 import org.deeplearning4j.nn.api.MaskState
 import org.deeplearning4j.nn.conf.InputPreProcessor
 import org.deeplearning4j.nn.conf.inputs.InputType

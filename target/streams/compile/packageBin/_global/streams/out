@@ -1,11 +1,1 @@
-[0m[[0m[0mdebug[0m] [0m[0mPackaging /Users/akhilnair/Desktop/CS441_Fall2024_Assignment/target/scala-2.13/cs441_fall2024_assignment_2.13-0.1.0-SNAPSHOT.jar ...[0m
-[0m[[0m[0mdebug[0m] [0m[0mInput file mappings:[0m
-[0m[[0m[0mdebug[0m] [0m[0m	Main$.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /Users/akhilnair/Desktop/CS441_Fall2024_Assignment/target/scala-2.13/classes/Main$.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	TensorFlowTest.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /Users/akhilnair/Desktop/CS441_Fall2024_Assignment/target/scala-2.13/classes/TensorFlowTest.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	TensorFlowTest$.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /Users/akhilnair/Desktop/CS441_Fall2024_Assignment/target/scala-2.13/classes/TensorFlowTest$.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	Main.class[0m
-[0m[[0m[0mdebug[0m] [0m[0m	  /Users/akhilnair/Desktop/CS441_Fall2024_Assignment/target/scala-2.13/classes/Main.class[0m
-[0m[[0m[0mdebug[0m] [0m[0mDone packaging.[0m
+[0m[[0m[0mdebug[0m] [0m[0mJar uptodate: /Users/akhilnair/Desktop/CS441_Fall2024_Assignment/target/scala-2.13/cs441_fall2024_assignment_2.13-0.1.0-SNAPSHOT.jar[0m

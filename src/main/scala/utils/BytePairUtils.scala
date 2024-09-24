@@ -43,12 +43,8 @@ object BytePairUtils {
     }.toSeq
   }
 
-  def getMaxVocabSize(decodedTokens : Seq[Int]): Int = {
-    val uniqueTokenIds: Set[Int] = decodedTokens.toSet
-    val maxTokenId: Int = uniqueTokenIds.max
-    val vocabSize: Int = maxTokenId + 1
-    vocabSize
-
+  def getVocabSize(decodedTokens: Seq[Int]): Int = {
+    decodedTokens.distinct.length
   }
 
 }
