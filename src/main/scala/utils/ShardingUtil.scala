@@ -93,13 +93,15 @@ class ShardingUtil {
     val shardSize = 15 // Number of lines per shard
     val (inputFilePath, outputDir, isCSV) = if (isDataset) {
       (
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/datasets/the-verdict.txt",
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/shards/",
+//        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/datasets/the-verdict.txt",
+//        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/shards/",
+        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/TokensOutput/tokens.txt",
+        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/tokens_shards/",
         false
       )
     } else {
       (
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/EmbeddingsOutput/embeddings.csv",
+        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/FinalEmbeddings/embeddings.csv",
         "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/csv_shards/",
         true
       )

@@ -12,13 +12,13 @@ import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener
 
-import java.io.PrintWriter
+import java.io.{File, FileWriter, PrintWriter}
 
 
 object EmbeddingGenerator {
 
-    def trainAndSaveEmbeddings(decodedTokens: Seq[Int], windowSize: Int, stride: Int, outputFileName: String): Unit = {
-    val (remappedDecoded, tokenToIndex) = remapTokens(decodedTokens)
+  def generateEmbeddingsForTokens(encodedTokens: Seq[Int], windowSize: Int, stride: Int): Map[Int, INDArray] = {
+    val (remappedDecoded, tokenToIndex) = remapTokens(encodedTokens)
     val inputOutputPairs = BytePairUtils.createInputOutputPairs(remappedDecoded, windowSize, stride)
     val (inputFeatures, outputLabels) = convertToIndArrays(inputOutputPairs)
 
@@ -44,8 +44,14 @@ object EmbeddingGenerator {
     }
 
     val embeddings: INDArray = model.getLayer(0).getParam("W")
-    saveEmbeddings(outputFileName, embeddings, tokenToIndex)
-    println(s"Embeddings saved to $outputFileName")
+    val indexToToken = tokenToIndex.map(_.swap) // Reverse the map to get index -> token
+    val embeddingsMap: Map[Int, INDArray] = (0 until embeddings.rows()).map { rowIndex =>
+      val tokenId = indexToToken(rowIndex)
+      tokenId -> embeddings.getRow(rowIndex).dup() // Make sure to duplicate the row to avoid issues with shared memory
+    }.toMap
+
+    // Return the map containing each token ID mapped to its embedding vector
+    embeddingsMap
   }
 
   def remapTokens(decodedTokens: Seq[Int]): (Seq[Int], Map[Int, Int]) = {
@@ -55,28 +61,30 @@ object EmbeddingGenerator {
     (remappedTokens, tokenToIndex)
   }
 
-  def saveEmbeddings(filename: String, embeddings: INDArray, tokenToIndex: Map[Int, Int]): Unit = {
-    val pw = new PrintWriter(filename)
+  def saveEmbeddingToCSV(tokenID: Int, tokenWord: String, embeddingStr: String): Unit = {
+    val csvFilePath = "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/FinalEmbeddings/embeddings.csv"
+    val file = new File(csvFilePath)
+    val append = file.exists()
+
+    // Create the parent directory if it doesn't exist
+    val parentDir = file.getParentFile
+    if (parentDir != null && !parentDir.exists()) {
+      parentDir.mkdirs()
+    }
+
+    val pw = new PrintWriter(new FileWriter(file, append)) // Open in append mode if file exists
     try {
-      val indexToToken = tokenToIndex.map(_.swap)
-      val indexToWord = indexToToken.map { case (index, originalToken) =>
-        val word = BytePairUtils.decode(Seq(originalToken))
-        (index, word)
+      // Write the header if it's a new file
+      if (!append) {
+        pw.println("TokenID,Word,Embeddings")
       }
-      pw.println("Index,Original Token,Word,Embeddings")
-      val rows = embeddings.rows()
-      for (i <- 0 until rows) {
-        val originalToken = indexToToken.getOrElse(i, -1)
-        val word = indexToWord.getOrElse(i, "Unknown")
-        val vector = embeddings.getRow(i).toDoubleVector.mkString(",")
-        pw.println(s"$i,$originalToken,$word,$vector")
-      }
+      pw.println(s"$tokenID,$tokenWord,$embeddingStr")
     } finally {
       pw.close()
     }
   }
 
-  def convertToIndArrays(inputOutputPairs : Seq[(Array[Int], Int)]): (INDArray, INDArray) = {
+  def convertToIndArrays(inputOutputPairs: Seq[(Array[Int], Int)]): (INDArray, INDArray) = {
     val inputSequences: Array[Array[Double]] = inputOutputPairs.map { case (inputArray, _) =>
       inputArray.map(_.toDouble)
     }.toArray
@@ -93,7 +101,6 @@ object EmbeddingGenerator {
     (inputFeatures, outputLabels)
 
   }
-
 
 
 }

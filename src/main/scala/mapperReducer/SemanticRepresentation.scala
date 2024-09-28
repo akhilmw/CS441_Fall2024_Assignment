@@ -61,7 +61,7 @@ object SemanticRepresentation {
       val line = value.toString.trim
 
       // Skip the header line, checking within each mapper
-      if (isFirstLine && line.startsWith("Index,Original Token,Word,Embeddings")) {
+      if (isFirstLine && line.startsWith("TokenID,Word,Embeddings")) {
         isFirstLine = false
         return
       }
@@ -72,9 +72,9 @@ object SemanticRepresentation {
       val parts = splitCSV(line)
 
       // Check if the line contains at least a word and one embedding value
-      if (parts.length > 3) {
-        val word = parts(2).trim // The third column is the word
-        val embedding = parts.drop(3).mkString(",") // Join all embedding values into a single string
+      if (parts.length > 2) {
+        val word = parts(1).trim // The third column is the word
+        val embedding = parts.drop(2).mkString(",") // Join all embedding values into a single string
         context.write(new Text(word), new Text(embedding))
       }
     }

@@ -73,7 +73,7 @@ object WordCountBPEJob {
   class BPEReducer extends Reducer[Text, IntWritable, Text, Text] {
 
     private val collectedTokens = scala.collection.mutable.ListBuffer[Int]()
-    private val embeddingOutputFile = "embeddings.csv" // Path where embeddings will be saved
+    private val embeddingOutputFile = "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/EmbeddingsOutput/embeddings.csv" // Path where embeddings will be saved
 
 
     override def reduce(key: Text, values: java.lang.Iterable[IntWritable], context: Reducer[Text, IntWritable, Text, Text]#Context): Unit = {
@@ -98,10 +98,20 @@ object WordCountBPEJob {
     override def cleanup(context: Reducer[Text, IntWritable, Text, Text]#Context): Unit = {
       // Train the embedding model using the collected tokens
       if (collectedTokens.nonEmpty) {
-        println("Training embeddings using the collected tokens...")
-        val uniqueTokens = collectedTokens.distinct.toSeq
-        EmbeddingGenerator.trainAndSaveEmbeddings(uniqueTokens, windowSize = 3, stride = 1, outputFileName = embeddingOutputFile)
-        println(s"Embeddings saved to $embeddingOutputFile")
+        println("Writing collected tokens to HDFS for the next MapReduce job...")
+        val tokensOutputPath = new Path("/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/TokensOutput/tokens.txt")
+        val fs = tokensOutputPath.getFileSystem(context.getConfiguration)
+        val outputStream = fs.create(tokensOutputPath, true)
+
+        collectedTokens.distinct.foreach(token => {
+          outputStream.writeBytes(token.toString + "\n")
+        })
+
+        outputStream.close()
+//        println("Training embeddings using the collected tokens...")
+//        val uniqueTokens = collectedTokens.distinct.toSeq
+//        EmbeddingGenerator.trainAndSaveEmbeddings(uniqueTokens, windowSize = 3, stride = 1, outputFileName = embeddingOutputFile)
+//        println(s"Embeddings saved to $embeddingOutputFile")
       }
     }
   }
