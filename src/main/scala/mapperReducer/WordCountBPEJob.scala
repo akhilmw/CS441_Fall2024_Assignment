@@ -1,7 +1,6 @@
 package mapperReducer
 
 import utils.BytePairUtils
-import utils.EmbeddingGenerator
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -10,10 +9,14 @@ import org.apache.hadoop.mapreduce.{Job, Mapper, Reducer}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import scala.jdk.CollectionConverters._
+import org.slf4j.LoggerFactory
 
 
 
 object WordCountBPEJob {
+
+  // Initialize the logger
+  private val logger = LoggerFactory.getLogger(this.getClass)
 
 
   def main(args: Array[String]): Unit = {
@@ -26,6 +29,7 @@ object WordCountBPEJob {
     val inputPath = new Path(args(0))
     val outputPath = new Path(args(1))
 
+    logger.info(s"Running WordCountBPEJob with input path: $inputPath and output path: $outputPath")
     runJob(conf, inputPath, outputPath)
   }
 
@@ -46,9 +50,9 @@ object WordCountBPEJob {
     FileOutputFormat.setOutputPath(job, outputPath)
 
     if (job.waitForCompletion(true)) {
-      println("Job completed successfully.")
+      logger.info("Job completed successfully.")
     } else {
-      println("Job failed.")
+      logger.error("Job failed.")
     }
   }
 
@@ -56,15 +60,19 @@ object WordCountBPEJob {
   class TokenizerMapper extends Mapper[LongWritable, Text, Text, IntWritable] {
     val one = new IntWritable(1)
     val wordText = new Text()
+    private val logger = LoggerFactory.getLogger(this.getClass)
 
     override def map(key: LongWritable, value: Text, context: Mapper[LongWritable, Text, Text, IntWritable]#Context): Unit = {
       // Tokenize the line into words
       val line = value.toString.toLowerCase
+      logger.debug(s"Processing line: $line")
       val words = line.split("\\W+").filter(_.nonEmpty)
+
 
       words.foreach { word =>
         wordText.set(word)
         context.write(wordText, one)
+        logger.debug(s"Emitting word: $word with count 1")
       }
     }
   }
@@ -72,14 +80,24 @@ object WordCountBPEJob {
   // Reducer class
   class BPEReducer extends Reducer[Text, IntWritable, Text, Text] {
 
+    private val logger = LoggerFactory.getLogger(this.getClass)
+
     private val collectedTokens = scala.collection.mutable.ListBuffer[Int]()
     private val embeddingOutputFile = "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/EmbeddingsOutput/embeddings.csv" // Path where embeddings will be saved
-
+    private var isHeaderWritten = false
+    override def setup(context: Reducer[Text, IntWritable, Text, Text]#Context): Unit = {
+      // Check if this is the first call to the reducer and write the CSV header
+      if (!isHeaderWritten) {
+        val header = "Word,EncodedTokens,Frequency"
+        context.write(new Text(header), null) // Writing header once
+        isHeaderWritten = true
+      }
+    }
 
     override def reduce(key: Text, values: java.lang.Iterable[IntWritable], context: Reducer[Text, IntWritable, Text, Text]#Context): Unit = {
       // Sum the counts
-      // Sum the counts
       val sum = values.asScala.foldLeft(0)(_ + _.get())
+      logger.debug(s"Reducing word: ${key.toString} with count: $sum")
 
       // Apply Byte Pair Encoding
       val word = key.toString
@@ -89,31 +107,14 @@ object WordCountBPEJob {
       collectedTokens ++= tokens
 
       // Prepare output value
-      val tokensStr = tokens.mkString("[", " ", "]")
-      val outputValue = s"$tokensStr,$sum"
+      val tokensStr = tokens.mkString("[", " ", "]") // Represent the tokens in the desired CSV format
+      val outputValue = s"$word,\"$tokensStr\",$sum" // CSV format for each row
 
-      context.write(key, new Text(outputValue))
+      context.write(new Text(outputValue), null) // Write to context as CSV row
+
+      logger.debug(s"Emitting reduced word: $word with encoded tokens: $tokensStr and count: $sum")
     }
 
-    override def cleanup(context: Reducer[Text, IntWritable, Text, Text]#Context): Unit = {
-      // Train the embedding model using the collected tokens
-      if (collectedTokens.nonEmpty) {
-        println("Writing collected tokens to HDFS for the next MapReduce job...")
-        val tokensOutputPath = new Path("/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/TokensOutput/tokens.txt")
-        val fs = tokensOutputPath.getFileSystem(context.getConfiguration)
-        val outputStream = fs.create(tokensOutputPath, true)
-
-        collectedTokens.distinct.foreach(token => {
-          outputStream.writeBytes(token.toString + "\n")
-        })
-
-        outputStream.close()
-//        println("Training embeddings using the collected tokens...")
-//        val uniqueTokens = collectedTokens.distinct.toSeq
-//        EmbeddingGenerator.trainAndSaveEmbeddings(uniqueTokens, windowSize = 3, stride = 1, outputFileName = embeddingOutputFile)
-//        println(s"Embeddings saved to $embeddingOutputFile")
-      }
-    }
   }
 
 

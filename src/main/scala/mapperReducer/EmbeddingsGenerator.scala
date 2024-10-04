@@ -4,12 +4,13 @@ import utils.EmbeddingGenerator
 import utils.BytePairUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{IntWritable, LongWritable, Text}
+import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, Mapper, Reducer}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
+import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
@@ -19,9 +20,11 @@ import scala.jdk.CollectionConverters._
 
 object EmbeddingsGenerator {
 
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
-      println("Usage: EmbeddingTrainingJob <input path> <output path>")
+      logger.error("Usage: EmbeddingTrainingJob <input path> <output path>")
       System.exit(-1)
     }
 
@@ -29,6 +32,7 @@ object EmbeddingsGenerator {
     val inputPath = new Path(args(0))
     val outputPath = new Path(args(1))
 
+    logger.info(s"Starting job with input: $inputPath and output: $outputPath")
     runJob(conf, inputPath, outputPath)
   }
 
@@ -51,27 +55,46 @@ object EmbeddingsGenerator {
     FileOutputFormat.setOutputPath(job, outputPath)
 
     if (job.waitForCompletion(true)) {
-      println("Embedding Training Job completed successfully.")
+      logger.info("Embedding Training Job completed successfully.")
     } else {
-      println("Embedding Training Job failed.")
+      logger.error("Embedding Training Job failed.")
     }
   }
 
 
   class EmbeddingMapper extends Mapper[LongWritable, Text, Text, Text] {
+
+    private val logger = LoggerFactory.getLogger(this.getClass)
     // Accumulate tokens from the shard
     private val collectedTokens = ListBuffer[Int]()
 
     // The map method now only collects tokens
     override def map(key: LongWritable, value: Text, context: Mapper[LongWritable, Text, Text, Text]#Context): Unit = {
+      logger.debug(s"Processing line: ${value.toString}")
+      // Skip the header line
+      if (key.get() == 0 && value.toString.contains("Word,EncodedTokens,Frequency")) {
+        return
+      }
+
+      // Read and parse the CSV line
       val line = value.toString.trim
-      val tokens = line.split("\\s+").map(_.toInt) // Convert tokens to integers
-      collectedTokens ++= tokens // Collect all tokens from this shard
+      val columns = splitCSV(line)
+
+      // Extract the EncodedTokens column, expected to be in the second column
+      if (columns.length > 1) {
+        val encodedTokensStr = columns(1).trim
+
+        // Remove brackets and split by space to extract individual token IDs
+        val tokens = encodedTokensStr.stripPrefix("[").stripSuffix("]").split("\\s+").map(_.toInt)
+        collectedTokens ++= tokens // Collect tokens for embedding generation
+        logger.debug(s"Collected tokens: ${tokens.mkString("Array(", ", ", ")")}")
+      }
     }
 
     // The cleanup method is called once at the end of processing the shard
     override def cleanup(context: Mapper[LongWritable, Text, Text, Text]#Context): Unit = {
       if (collectedTokens.nonEmpty) {
+        logger.info(s"Generating embeddings for ${collectedTokens.size} tokens.")
         // Generate embeddings using the EmbeddingGenerator for the entire shard's tokens
         val embeddings: Map[Int, INDArray] = EmbeddingGenerator.generateEmbeddingsForTokens(collectedTokens.toSeq, windowSize = 3, stride = 1)
 
@@ -79,6 +102,7 @@ object EmbeddingsGenerator {
         embeddings.foreach { case (token, embeddingVector) =>
           val embeddingStr = embeddingVector.toDoubleVector.mkString(",")
           context.write(new Text(token.toString), new Text(embeddingStr))
+          logger.debug(s"Emitted embedding for token: $token")
         }
       }
     }
@@ -88,7 +112,16 @@ object EmbeddingsGenerator {
 
   class EmbeddingReducer extends Reducer[Text, Text, Text, Text] {
 
+    private val logger = LoggerFactory.getLogger(this.getClass)
+    override def setup(context: Reducer[Text, Text, Text, Text]#Context): Unit = {
+      logger.info("Reducer setup initialized.")
+      // Write the CSV header to the context once at the beginning
+      val header = "TokenID,Word,Embeddings"
+      context.write(null, new Text(header))
+    }
+
     override def reduce(key: Text, values: java.lang.Iterable[Text], context: Reducer[Text, Text, Text, Text]#Context): Unit = {
+      logger.debug(s"Reducing for key: ${key.toString}")
       val embeddingVectors = values.asScala.map { value =>
         val vectorArray = value.toString.split(",").map(_.toDouble)
         Nd4j.create(vectorArray)
@@ -103,11 +136,29 @@ object EmbeddingsGenerator {
       val tokenWord = BytePairUtils.decode(Seq(tokenID))
       val embeddingStr = averageVector.toDoubleVector.mkString(",")
 
-      // Write the final averaged embedding
-      EmbeddingGenerator.saveEmbeddingToCSV(tokenID, tokenWord, embeddingStr)
+      val csvRow = s"$tokenID,$tokenWord,$embeddingStr"
 
-      context.write(key, new Text(averageVector.toDoubleVector.mkString(",")))
+      // Write the CSV row to the context
+      context.write(null, new Text(csvRow))
+      logger.debug(s"Emitted CSV row: $csvRow")
     }
+  }
+
+  private def splitCSV(line: String): Array[String] = {
+    val buffer = ListBuffer[String]()
+    val current = new StringBuilder
+    var inQuotes = false
+
+    line.foreach {
+      case '"' => inQuotes = !inQuotes // Toggle quotes
+      case ',' if !inQuotes =>
+        buffer += current.toString().trim // Add value to buffer
+        current.clear() // Clear for the next value
+      case char => current.append(char)
+    }
+
+    buffer += current.toString().trim // Add the last value
+    buffer.toArray
   }
 
 }

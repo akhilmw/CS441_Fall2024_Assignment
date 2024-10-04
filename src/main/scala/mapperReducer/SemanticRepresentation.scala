@@ -4,7 +4,7 @@ import utils.SimilarityUtil
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{Text, IntWritable}
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{Job, Mapper, Reducer}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
@@ -12,12 +12,15 @@ import scala.jdk.CollectionConverters._
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.api.ndarray.INDArray
 import scala.collection.mutable.ArrayBuffer
+import org.slf4j.LoggerFactory
 
 object SemanticRepresentation {
 
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
   def main(args: Array[String]): Unit = {
     if (args.length != 3) {
-      println("Usage: FindSimilarWordsJob <input embeddings path> <output path> <topN>")
+      logger.error("Usage: FindSimilarWordsJob <input embeddings path> <output path> <topN>")
       System.exit(-1)
     }
 
@@ -46,14 +49,16 @@ object SemanticRepresentation {
     FileOutputFormat.setOutputPath(job, outputPath)
 
     if (job.waitForCompletion(true)) {
-      println("Job completed successfully.")
+      logger.info("Job completed successfully.")
     } else {
-      println("Job failed.")
+      logger.error("Job failed.")
     }
   }
 
   // Mapper class to read the embeddings
   class EmbeddingMapper extends Mapper[Object, Text, Text, Text] {
+
+    private val logger = LoggerFactory.getLogger(this.getClass)
     // Track the first row in each mapper
     var isFirstLine = true
 
@@ -63,6 +68,7 @@ object SemanticRepresentation {
       // Skip the header line, checking within each mapper
       if (isFirstLine && line.startsWith("TokenID,Word,Embeddings")) {
         isFirstLine = false
+        logger.debug("Skipping header line.")
         return
       }
 
@@ -76,6 +82,9 @@ object SemanticRepresentation {
         val word = parts(1).trim // The third column is the word
         val embedding = parts.drop(2).mkString(",") // Join all embedding values into a single string
         context.write(new Text(word), new Text(embedding))
+        logger.debug(s"Emitted word: $word with embedding.")
+      }else {
+        logger.warn(s"Invalid line format: $line")
       }
     }
 
@@ -100,6 +109,8 @@ object SemanticRepresentation {
 
   // Reducer class to compute cosine similarities
   class SimilarityReducer extends Reducer[Text, Text, Text, Text] {
+
+    private val logger = LoggerFactory.getLogger(this.getClass)
     // Store all word embeddings
     private val wordEmbeddings = scala.collection.mutable.Map[String, INDArray]()
 
@@ -110,6 +121,9 @@ object SemanticRepresentation {
       if (embeddingArray.nonEmpty) {
         val embeddingVector = Nd4j.create(embeddingArray.toArray)
         wordEmbeddings.put(key.toString, embeddingVector)
+        logger.debug(s"Stored embedding for word: ${key.toString}")
+      }else {
+        logger.warn(s"Empty embedding array for word: ${key.toString}")
       }
     }
 
@@ -129,13 +143,14 @@ object SemanticRepresentation {
         // Get the top N most similar words
         val topSimilarWords = similarities.toSeq.sortBy(-_._2).take(topN)
 
-        // Convert to the desired output format
-        val similarWordsStr = topSimilarWords.map { case (word, score) =>
-          s"$word:$score"
-        }.mkString("; ")
+        val yamlLines = topSimilarWords.map { case (word, score) =>
+          s"  - word: $word\n    similarity: $score"
+        }.mkString("\n")
 
-        // Write the output
-        context.write(new Text(word1), new Text(similarWordsStr))
+        // Write the YAML entry for each word
+        val yamlEntry = s"$word1:\n$yamlLines"
+        context.write(null, new Text(yamlEntry))
+        logger.debug(s"Written YAML entry for word: $word1")
       }
     }
   }
