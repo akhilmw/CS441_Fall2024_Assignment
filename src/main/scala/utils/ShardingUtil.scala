@@ -1,6 +1,7 @@
 package utils
 
 import java.io.{File, PrintWriter}
+import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
 class ShardingUtil {
@@ -89,17 +90,21 @@ class ShardingUtil {
    *
    * @param isDataset Boolean indicating whether the input file is a text dataset.
    */
-  def shardTextOrCSV(isDataset: Boolean): Unit = {
-    val shardSize = 15 // Number of lines per shard
-    val (inputFilePath, outputDir, isCSV) = if (isDataset) {
+  def shardTextOrCSV(isDataset: Boolean, isTokens: Boolean, shardSize: Int): Unit = {
+    val (inputFilePath, outputDir, isCSV) = if (isDataset && isTokens) {
       (
-//        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/datasets/the-verdict.txt",
-//        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/shards/",
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/TokensOutput/tokens.txt",
+        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/TokensOutput/wordcount_output.csv",
         "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/tokens_shards/",
+        true
+      )
+    }
+    else if (isDataset && !isTokens) {
+      ("/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/datasets/wikitext_test.txt",
+        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/shards/",
         false
       )
-    } else {
+    }
+    else {
       (
         "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/FinalEmbeddings/embeddings.csv",
         "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/csv_shards/",
@@ -109,4 +114,22 @@ class ShardingUtil {
 
     shardFile(inputFilePath, outputDir, shardSize, isCSV)
   }
+
+  def splitCSV(line: String): Array[String] = {
+    val buffer = ListBuffer[String]()
+    val current = new StringBuilder
+    var inQuotes = false
+
+    line.foreach {
+      case '"' => inQuotes = !inQuotes // Toggle quotes
+      case ',' if !inQuotes =>
+        buffer += current.toString().trim // Add value to buffer
+        current.clear() // Clear for the next value
+      case char => current.append(char)
+    }
+
+    buffer += current.toString().trim // Add the last value
+    buffer.toArray
+  }
+
 }

@@ -1,0 +1,10 @@
+/src/main/resources/datasets/wikitext_train.txt
+/src/main/resources/datasets/wikitext_test.txt
+/src/main/resources/datasets/wikitext_validation.txt
+
+target/
+
+/.idea/modules.xml
+.idea/libraries/
+
+.DS_Store

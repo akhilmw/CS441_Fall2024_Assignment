@@ -1,6 +1,6 @@
 package mapperReducer
 
-import utils.SimilarityUtil
+import utils.{SimilarityUtil, ShardingUtil}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -13,10 +13,17 @@ import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.api.ndarray.INDArray
 import scala.collection.mutable.ArrayBuffer
 import org.slf4j.LoggerFactory
+import com.typesafe.config.ConfigFactory
 
 object SemanticRepresentation {
 
+  private val config = ConfigFactory.load()
+  private val reducersNum = config.getInt("semantic-representation.reducer-count")
+  private val defaultTopN = config.getInt("embedding-generator.top-N")
+
+
   private val logger = LoggerFactory.getLogger(this.getClass)
+  private val shardingUtil = new ShardingUtil()
 
   def main(args: Array[String]): Unit = {
     if (args.length != 3) {
@@ -48,6 +55,8 @@ object SemanticRepresentation {
     FileInputFormat.addInputPath(job, inputPath)
     FileOutputFormat.setOutputPath(job, outputPath)
 
+    job.setNumReduceTasks(reducersNum)
+
     if (job.waitForCompletion(true)) {
       logger.info("Job completed successfully.")
     } else {
@@ -59,23 +68,18 @@ object SemanticRepresentation {
   class EmbeddingMapper extends Mapper[Object, Text, Text, Text] {
 
     private val logger = LoggerFactory.getLogger(this.getClass)
-    // Track the first row in each mapper
-    var isFirstLine = true
 
     override def map(key: Object, value: Text, context: Mapper[Object, Text, Text, Text]#Context): Unit = {
       val line = value.toString.trim
 
       // Skip the header line, checking within each mapper
-      if (isFirstLine && line.startsWith("TokenID,Word,Embeddings")) {
-        isFirstLine = false
+      if (line.startsWith("TokenID,Word,Embeddings")) {
         logger.debug("Skipping header line.")
         return
       }
 
-      isFirstLine = false // Mark first line as processed
-
       // Splitting the CSV line while handling potential commas within quoted fields
-      val parts = splitCSV(line)
+      val parts = shardingUtil.splitCSV(line)
 
       // Check if the line contains at least a word and one embedding value
       if (parts.length > 2) {
@@ -83,28 +87,11 @@ object SemanticRepresentation {
         val embedding = parts.drop(2).mkString(",") // Join all embedding values into a single string
         context.write(new Text(word), new Text(embedding))
         logger.debug(s"Emitted word: $word with embedding.")
-      }else {
+      } else {
         logger.warn(s"Invalid line format: $line")
       }
     }
 
-    // Helper method to split CSV lines while handling quoted commas
-    private def splitCSV(line: String): Array[String] = {
-      val buffer = ArrayBuffer[String]()
-      val current = new StringBuilder
-      var inQuotes = false
-
-      line.foreach {
-        case '"' => inQuotes = !inQuotes // Toggle inQuotes flag
-        case ',' if !inQuotes =>
-          buffer += current.toString().trim // Add the value
-          current.clear() // Clear for the next value
-        case char => current.append(char)
-      }
-
-      buffer += current.toString().trim // Add the last value
-      buffer.toArray
-    }
   }
 
   // Reducer class to compute cosine similarities
@@ -122,14 +109,14 @@ object SemanticRepresentation {
         val embeddingVector = Nd4j.create(embeddingArray.toArray)
         wordEmbeddings.put(key.toString, embeddingVector)
         logger.debug(s"Stored embedding for word: ${key.toString}")
-      }else {
+      } else {
         logger.warn(s"Empty embedding array for word: ${key.toString}")
       }
     }
 
     // Cleanup method runs after all reduce calls are done
     override def cleanup(context: Reducer[Text, Text, Text, Text]#Context): Unit = {
-      val topN = context.getConfiguration.getInt("topN", 5)
+      val topN = context.getConfiguration.getInt("topN", defaultTopN)
 
       // Now we have all word embeddings, perform pairwise similarity calculations
       wordEmbeddings.foreach { case (word1, vector1) =>

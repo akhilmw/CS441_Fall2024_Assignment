@@ -8,23 +8,39 @@ import org.deeplearning4j.nn.conf.layers.{EmbeddingSequenceLayer, OutputLayer}
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork
 import org.deeplearning4j.nn.weights.WeightInit
 import org.nd4j.linalg.activations.Activation
-import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener
-
-import java.io.{File, FileWriter, PrintWriter}
+import com.typesafe.config.ConfigFactory
 
 
 object EmbeddingGenerator {
 
+  // Load properties from the configuration file
+  private val config = ConfigFactory.load()
+  private val numEpochs = config.getInt("embedding-generator.num-epochs")
+  private val embeddingDim = config.getInt("embedding-generator.embedding-dim")
+
+
+  /**
+   * Generate embeddings for the provided tokens.
+   *
+   * @param encodedTokens Sequence of tokens (integers) to generate embeddings for.
+   * @param windowSize    Size of the sliding window used to create input-output pairs.
+   * @param stride        Number of tokens to shift the sliding window each time.
+   * @return A map of token IDs to their corresponding embedding vectors (INDArray).
+   */
+
   def generateEmbeddingsForTokens(encodedTokens: Seq[Int], windowSize: Int, stride: Int): Map[Int, INDArray] = {
+    // Remap tokens to create unique token IDs
     val (remappedDecoded, tokenToIndex) = remapTokens(encodedTokens)
+    // Create input-output pairs from the sequence of tokens
     val inputOutputPairs = BytePairUtils.createInputOutputPairs(remappedDecoded, windowSize, stride)
+    // Convert the input-output pairs into INDArrays (used by Deeplearning4j)
     val (inputFeatures, outputLabels) = convertToIndArrays(inputOutputPairs)
 
     val vocabSize = tokenToIndex.size
-    val embeddingDim = 50
 
+    // Define the neural network configuration
     val config: MultiLayerConfiguration = new NeuralNetConfiguration.Builder()
       .weightInit(WeightInit.XAVIER)
       .list()
@@ -33,58 +49,50 @@ object EmbeddingGenerator {
       .layer(1, new OutputLayer.Builder(LossFunction.SPARSE_MCXENT).nIn(embeddingDim * windowSize).nOut(vocabSize).activation(Activation.SOFTMAX).build())
       .build()
 
+    // Initialize the neural network model
     val model = new MultiLayerNetwork(config)
     model.init()
     model.setListeners(new ScoreIterationListener(100))
 
-    val numEpochs = 100
-    for (epoch <- 1 to numEpochs) {
+    // Train the model for the specified number of epochs
+    (1 to numEpochs).foreach { _ =>
       model.fit(inputFeatures, outputLabels)
-      println(s"Completed epoch $epoch")
     }
 
+    // Extract the learned embeddings from the first layer (EmbeddingSequenceLayer)
     val embeddings: INDArray = model.getLayer(0).getParam("W")
-    val indexToToken = tokenToIndex.map(_.swap) // Reverse the map to get index -> token
+    // Reverse the map to get index -> token
+    val indexToToken = tokenToIndex.map(_.swap)
     val embeddingsMap: Map[Int, INDArray] = (0 until embeddings.rows()).map { rowIndex =>
       val tokenId = indexToToken(rowIndex)
-      tokenId -> embeddings.getRow(rowIndex).dup() // Make sure to duplicate the row to avoid issues with shared memory
+      tokenId -> embeddings.getRow(rowIndex).dup()
     }.toMap
 
     // Return the map containing each token ID mapped to its embedding vector
     embeddingsMap
   }
 
-  def remapTokens(decodedTokens: Seq[Int]): (Seq[Int], Map[Int, Int]) = {
-    val uniqueTokens = decodedTokens.distinct.sorted
+  /**
+   * Remap tokens to unique indices.
+   *
+   * @param encodedTokens Sequence of original tokens (integers).
+   * @return A tuple containing the remapped tokens and a map from original token to its new index.
+   */
+  private def remapTokens(encodedTokens: Seq[Int]): (Seq[Int], Map[Int, Int]) = {
+    val uniqueTokens = encodedTokens.distinct.sorted
     val tokenToIndex = uniqueTokens.zipWithIndex.toMap
-    val remappedTokens = decodedTokens.map(tokenToIndex)
+    val remappedTokens = encodedTokens.map(tokenToIndex)
     (remappedTokens, tokenToIndex)
   }
 
-  def saveEmbeddingToCSV(tokenID: Int, tokenWord: String, embeddingStr: String): Unit = {
-    val csvFilePath = "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/FinalEmbeddings/embeddings.csv"
-    val file = new File(csvFilePath)
-    val append = file.exists()
 
-    // Create the parent directory if it doesn't exist
-    val parentDir = file.getParentFile
-    if (parentDir != null && !parentDir.exists()) {
-      parentDir.mkdirs()
-    }
-
-    val pw = new PrintWriter(new FileWriter(file, append)) // Open in append mode if file exists
-    try {
-      // Write the header if it's a new file
-      if (!append) {
-        pw.println("TokenID,Word,Embeddings")
-      }
-      pw.println(s"$tokenID,$tokenWord,$embeddingStr")
-    } finally {
-      pw.close()
-    }
-  }
-
-  def convertToIndArrays(inputOutputPairs: Seq[(Array[Int], Int)]): (INDArray, INDArray) = {
+  /**
+   * Convert input-output token pairs to INDArrays.
+   *
+   * @param inputOutputPairs Sequence of (input sequence, target token) pairs.
+   * @return A tuple containing the input features and output labels as INDArrays.
+   */
+  private def convertToIndArrays(inputOutputPairs: Seq[(Array[Int], Int)]): (INDArray, INDArray) = {
     val inputSequences: Array[Array[Double]] = inputOutputPairs.map { case (inputArray, _) =>
       inputArray.map(_.toDouble)
     }.toArray

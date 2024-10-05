@@ -1,7 +1,6 @@
 package mapperReducer
 
-import utils.EmbeddingGenerator
-import utils.BytePairUtils
+import utils.{EmbeddingGenerator, ShardingUtil, BytePairUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -11,16 +10,21 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.slf4j.LoggerFactory
+import com.typesafe.config.ConfigFactory
 
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 
-
-
 object EmbeddingsGenerator {
 
+  private val config = ConfigFactory.load()
+  private val reducersNum = config.getInt("embedding-generator.reducer-count")
+  private val windowSize = config.getInt("embedding-generator.window-size")
+  private val stride = config.getInt("embedding-generator.stride-size")
+
   private val logger = LoggerFactory.getLogger(this.getClass)
+  private val shardingUtil = new ShardingUtil()
 
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
@@ -51,6 +55,8 @@ object EmbeddingsGenerator {
     job.setOutputKeyClass(classOf[Text])
     job.setOutputValueClass(classOf[Text])
 
+    job.setNumReduceTasks(reducersNum)
+
     FileInputFormat.addInputPath(job, inputPath)
     FileOutputFormat.setOutputPath(job, outputPath)
 
@@ -71,14 +77,14 @@ object EmbeddingsGenerator {
     // The map method now only collects tokens
     override def map(key: LongWritable, value: Text, context: Mapper[LongWritable, Text, Text, Text]#Context): Unit = {
       logger.debug(s"Processing line: ${value.toString}")
-      // Skip the header line
-      if (key.get() == 0 && value.toString.contains("Word,EncodedTokens,Frequency")) {
+      // Skip the header lines
+      if (value.toString.contains("Word,EncodedTokens,Frequency")) {
         return
       }
 
       // Read and parse the CSV line
       val line = value.toString.trim
-      val columns = splitCSV(line)
+      val columns = shardingUtil.splitCSV(line)
 
       // Extract the EncodedTokens column, expected to be in the second column
       if (columns.length > 1) {
@@ -96,7 +102,7 @@ object EmbeddingsGenerator {
       if (collectedTokens.nonEmpty) {
         logger.info(s"Generating embeddings for ${collectedTokens.size} tokens.")
         // Generate embeddings using the EmbeddingGenerator for the entire shard's tokens
-        val embeddings: Map[Int, INDArray] = EmbeddingGenerator.generateEmbeddingsForTokens(collectedTokens.toSeq, windowSize = 3, stride = 1)
+        val embeddings: Map[Int, INDArray] = EmbeddingGenerator.generateEmbeddingsForTokens(collectedTokens.toSeq, windowSize, stride)
 
         // Emit each token and its corresponding embedding
         embeddings.foreach { case (token, embeddingVector) =>
@@ -109,10 +115,10 @@ object EmbeddingsGenerator {
   }
 
 
-
   class EmbeddingReducer extends Reducer[Text, Text, Text, Text] {
 
     private val logger = LoggerFactory.getLogger(this.getClass)
+
     override def setup(context: Reducer[Text, Text, Text, Text]#Context): Unit = {
       logger.info("Reducer setup initialized.")
       // Write the CSV header to the context once at the beginning
@@ -144,22 +150,6 @@ object EmbeddingsGenerator {
     }
   }
 
-  private def splitCSV(line: String): Array[String] = {
-    val buffer = ListBuffer[String]()
-    val current = new StringBuilder
-    var inQuotes = false
-
-    line.foreach {
-      case '"' => inQuotes = !inQuotes // Toggle quotes
-      case ',' if !inQuotes =>
-        buffer += current.toString().trim // Add value to buffer
-        current.clear() // Clear for the next value
-      case char => current.append(char)
-    }
-
-    buffer += current.toString().trim // Add the last value
-    buffer.toArray
-  }
 
 }
 

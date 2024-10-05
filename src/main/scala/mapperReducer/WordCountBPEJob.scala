@@ -10,10 +10,14 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import scala.jdk.CollectionConverters._
 import org.slf4j.LoggerFactory
+import com.typesafe.config.ConfigFactory
 
 
 
 object WordCountBPEJob {
+
+  private val config = ConfigFactory.load()
+  private val reducersNum = config.getInt("word-count-bpe.reducer-count")
 
   // Initialize the logger
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -21,7 +25,7 @@ object WordCountBPEJob {
 
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
-      println("Usage: WordCountBPEJob <input path> <output path>")
+      logger.error("Usage: WordCountBPEJob <input path> <output path>")
       System.exit(-1)
     }
 
@@ -48,6 +52,8 @@ object WordCountBPEJob {
 
     FileInputFormat.addInputPath(job, inputPath)
     FileOutputFormat.setOutputPath(job, outputPath)
+
+    job.setNumReduceTasks(reducersNum)
 
     if (job.waitForCompletion(true)) {
       logger.info("Job completed successfully.")
@@ -83,7 +89,6 @@ object WordCountBPEJob {
     private val logger = LoggerFactory.getLogger(this.getClass)
 
     private val collectedTokens = scala.collection.mutable.ListBuffer[Int]()
-    private val embeddingOutputFile = "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/EmbeddingsOutput/embeddings.csv" // Path where embeddings will be saved
     private var isHeaderWritten = false
     override def setup(context: Reducer[Text, IntWritable, Text, Text]#Context): Unit = {
       // Check if this is the first call to the reducer and write the CSV header
