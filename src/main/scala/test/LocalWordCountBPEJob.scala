@@ -12,8 +12,8 @@ object LocalWordCountBPEJob {
     conf.set("fs.defaultFS", "file:///")
 
     // Set up paths
-    val inputPath = new Path("/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/shards/")
-    val outputPath = new Path("output")
+    val inputPath = new Path(args(0))
+    val outputPath = new Path(args(1))
 
     // Delete output path if it exists
     val fs = FileSystem.get(conf)

@@ -38,6 +38,9 @@ lazy val root = (project in file("."))
       "org.apache.hadoop" % "hadoop-mapreduce-client-jobclient" % "3.3.6",
       "org.apache.hadoop" % "hadoop-yarn-common" % "3.3.6",
       "org.slf4j" % "slf4j-simple" % "2.0.13",
-      "com.typesafe" % "config" % "1.4.3"
+      "com.typesafe" % "config" % "1.4.3",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      "org.apache.mrunit" % "mrunit" % "1.1.0" % "test" classifier "hadoop2",
+
     ),
   )

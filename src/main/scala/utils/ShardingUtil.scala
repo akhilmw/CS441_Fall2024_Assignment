@@ -1,10 +1,24 @@
 package utils
 
-import java.io.{File, PrintWriter}
+import java.io.{File, IOException, PrintWriter}
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
+import com.typesafe.config.ConfigFactory
+
 
 class ShardingUtil {
+
+  private val config = ConfigFactory.load()
+  private val datasetPath: String = config.getString("filePaths.datasetPath")
+  private val shardPath: String = config.getString("filePaths.shardPath")
+  private val orderedTokensPath: String = config.getString("filePaths.orderedTokensPath")
+  private val orderedCsvPath: String = config.getString("filePaths.orderedCsvPath")
+  val embeddingsPath: String = config.getString("filePaths.embeddingsPath")
+  val embeddingsCsvPath: String = config.getString("filePaths.embeddingsCsvPath")
+  val orderedTokenInputPath: String = config.getString("filePaths.orderedTokenInputPath")
+  val ordered_tokens_shards: String = config.getString("filePaths.ordered_tokens_shards")
+
+
 
   /**
    * Deletes existing shard files in the specified output directory.
@@ -81,6 +95,15 @@ class ShardingUtil {
    * @return A PrintWriter for the shard file.
    */
   private def createShardWriter(outputDir: String, index: Int, isCSV: Boolean): PrintWriter = {
+    val dir = new File(outputDir)
+
+    // Check if the directory exists, if not, create it
+    if (!dir.exists()) {
+      val created = dir.mkdirs() // Create the directory and any necessary parent directories
+      if (!created) {
+        throw new IOException(s"Failed to create directory: $outputDir")
+      }
+    }
     val extension = if (isCSV) "csv" else "txt"
     new PrintWriter(new File(s"$outputDir/shard_$index.$extension"))
   }
@@ -93,26 +116,55 @@ class ShardingUtil {
   def shardTextOrCSV(isDataset: Boolean, isTokens: Boolean, shardSize: Int): Unit = {
     val (inputFilePath, outputDir, isCSV) = if (isDataset && isTokens) {
       (
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/TokensOutput/wordcount_output.csv",
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/tokens_shards/",
-        true
+        orderedTokensPath,orderedCsvPath, true
       )
     }
     else if (isDataset && !isTokens) {
-      ("/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/datasets/wikitext_test.txt",
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/shards/",
-        false
+      (datasetPath, shardPath, false
       )
+    } else if (!isDataset && isTokens) {
+      (orderedTokenInputPath, ordered_tokens_shards, true)
     }
     else {
       (
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/FinalEmbeddings/embeddings.csv",
-        "/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/csv_shards/",
+        embeddingsPath,
+        embeddingsCsvPath,
         true
       )
     }
+      shardFile(inputFilePath, outputDir, shardSize, isCSV)
+//    shardWithLineNumbers(inputFilePath, outputDir, shardSize)
+  }
 
-    shardFile(inputFilePath, outputDir, shardSize, isCSV)
+  def shardWithLineNumbers(inputFilePath: String, outputDir: String, numShards: Int): Unit = {
+    // Clean up any existing shards before creating new ones
+    deleteExistingShards(outputDir)
+
+    val source = Source.fromFile(inputFilePath)
+    val lines = source.getLines().toArray
+    val linesPerShard = Math.ceil(lines.length.toDouble / numShards).toInt
+
+    var shardIndex = 0
+    var currentShardWriter = createShardWriter(outputDir, shardIndex, isCSV = false)
+    var lineCounter = 0
+
+    lines.zipWithIndex.foreach { case (line, lineNumber) =>
+      if (lineCounter >= linesPerShard) {
+        // Close the current shard and start a new one
+        currentShardWriter.close()
+        shardIndex += 1
+        currentShardWriter = createShardWriter(outputDir, shardIndex, isCSV = false)
+        lineCounter = 0
+      }
+
+      // Write the line number and the line content as a tab-separated value
+      currentShardWriter.println(s"$lineNumber\t$line")
+      lineCounter += 1
+    }
+
+    // Close any open resources
+    currentShardWriter.close()
+    source.close()
   }
 
   def splitCSV(line: String): Array[String] = {

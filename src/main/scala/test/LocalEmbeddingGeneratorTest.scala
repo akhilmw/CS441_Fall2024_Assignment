@@ -12,8 +12,10 @@ object LocalEmbeddingGeneratorTest {
     conf.set("fs.defaultFS", "file:///")
 
     // Define input and output paths
-    val inputPath = new Path("/Users/akhilnair/Desktop/CS441_Fall2024_Assignment/src/main/resources/tokens_shards/")
-    val outputPath = new Path("EmbeddingsOutput")
+    val inputPath = new Path(args(0))
+    val outputPath = new Path(args(1))
+    val outputFilePath = new Path(outputPath, "part-r-00000") // This is the generated output file
+    val renamedFilePath = new Path(outputPath, "embeddings.csv")   // This is the target CSV file name
 
     // Delete output path if it exists
     val fs = FileSystem.get(conf)
@@ -25,5 +27,16 @@ object LocalEmbeddingGeneratorTest {
     EmbeddingsGenerator.runJob(conf, inputPath, outputPath)
 
     println("Embedding generation test completed.")
+
+    if (fs.exists(outputFilePath)) {
+      val success = fs.rename(outputFilePath, renamedFilePath)
+      if (success) {
+        println(s"Renamed part-r-00000 to embeddings.csv successfully.")
+      } else {
+        println(s"Failed to rename part-r-00000 to output.csv.")
+      }
+    } else {
+      println(s"Output file part-r-00000 does not exist.")
+    }
   }
 }

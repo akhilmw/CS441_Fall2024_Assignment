@@ -78,7 +78,7 @@ object EmbeddingsGenerator {
     override def map(key: LongWritable, value: Text, context: Mapper[LongWritable, Text, Text, Text]#Context): Unit = {
       logger.debug(s"Processing line: ${value.toString}")
       // Skip the header lines
-      if (value.toString.contains("Word,EncodedTokens,Frequency")) {
+      if (value.toString.contains("word_pos,Word,EncodedTokens")) {
         return
       }
 
@@ -88,7 +88,7 @@ object EmbeddingsGenerator {
 
       // Extract the EncodedTokens column, expected to be in the second column
       if (columns.length > 1) {
-        val encodedTokensStr = columns(1).trim
+        val encodedTokensStr = columns(2).trim
 
         // Remove brackets and split by space to extract individual token IDs
         val tokens = encodedTokensStr.stripPrefix("[").stripSuffix("]").split("\\s+").map(_.toInt)
