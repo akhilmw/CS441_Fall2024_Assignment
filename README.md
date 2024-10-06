@@ -1,4 +1,4 @@
-# Hadoop Word Embeddings Project
+# CS441 : Homework 1
 Author: Akhil S Nair  
 Email: anair56@uic.edu
 
